@@ -8,11 +8,7 @@ As a self-taught aspiring data engineer operating under the moniker **Yanolitics
 
 ## 🗺️ High-Level Architecture
 
-The pipeline follows a modular Medallion-style architecture (Bronze → Silver → Gold) to ensure data lineage, scalability, and strict governance. The entire design layout is detailed in the file **DWH Data Architecture.png**.
-
-[ SOURCES ]            [ BRONZE ]               [ SILVER ]               [ GOLD ]             [ CONSUME ]
-CRM & ERP CSVs  ───>  Raw Data Tables  ───>  Clean/Standardized  ───>  Business-Ready  ───>  Ad-Hoc Queries
-(Files in Folders)    (Truncate & Insert)       (Transformations)          (Views)            (SQL Audits)
+The pipeline follows a modular Medallion-style architecture (Bronze → Silver → Gold) to ensure data lineage, scalability, and strict governance.
 
 
 ---
