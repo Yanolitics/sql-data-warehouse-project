@@ -1,6 +1,10 @@
 -- ====================================================================
 -- Project: Data Warehouse Initialization (Medallion Architecture)
 -- Developer: Yanolitics
+-- Purpose: Sets up the initial environment, database, and isolated 
+--          schemas (Bronze, Silver, Gold) for the data pipeline.
+-- WARNING: Running this script drops the existing 'DataWarehouse' 
+--          database and permanently deletes all data. Dev use only!
 -- ====================================================================
 
 USE master;
