@@ -1,7 +1,7 @@
 -- ====================================================================
--- Project: Data Warehouse - Bronze Layer (CRM Ingestion)
+-- Project: Data Warehouse - Bronze Layer Ingestion (CRM & ERP)
 -- Developer: Yanolitics
--- Purpose: Creates raw landing tables for CRM source data.
+-- Purpose: Creates raw landing tables for both CRM and ERP source systems.
 -- WARNING: Running this script drops existing tables and permanently 
 --          deletes all data within them. Dev use only!
 -- ====================================================================
@@ -9,8 +9,9 @@
 USE DataWarehouse;
 GO
 
--- ─── 1. CUSTOMER INFO TABLE ──────────────────────────────────────────
+-- ─── SECTION 1: CRM TABLES ───────────────────────────────────────────
 
+-- 1. Customer Info Table
 IF OBJECT_ID('bronze.crm_cust_info', 'U') IS NOT NULL
     DROP TABLE bronze.crm_cust_info;
 GO
@@ -26,8 +27,7 @@ CREATE TABLE bronze.crm_cust_info (
 );
 GO
 
--- ─── 2. PRODUCT INFO TABLE ───────────────────────────────────────────
-
+-- 2. Product Info Table
 IF OBJECT_ID('bronze.crm_prd_info', 'U') IS NOT NULL
     DROP TABLE bronze.crm_prd_info;
 GO
@@ -43,8 +43,7 @@ CREATE TABLE bronze.crm_prd_info (
 );
 GO
 
--- ─── 3. SALES DETAILS TABLE ──────────────────────────────────────────
-
+-- 3. Sales Details Table
 IF OBJECT_ID('bronze.crm_sales_details', 'U') IS NOT NULL
     DROP TABLE bronze.crm_sales_details;
 GO
@@ -56,13 +55,53 @@ CREATE TABLE bronze.crm_sales_details (
     sls_order_dt DATE,
     sls_ship_dt  DATE,
     sls_due_dt   DATE,
-    sls_sales    NVARCHAR(50), -- Kept as NVARCHAR to safely ingest dirty raw string data
+    sls_sales    NVARCHAR(50), -- Kept as NVARCHAR to safely ingest dirty string data
     sls_quantity NVARCHAR(50),
     sls_price    NVARCHAR(50)
 );
 GO
 
--- ─── VERIFICATION AUDIT ──────────────────────────────────────────────
+
+-- ─── SECTION 2: ERP TABLES ───────────────────────────────────────────
+
+-- 4. ERP Customer Guest List Table
+IF OBJECT_ID('bronze.erp_cust_az12', 'U') IS NOT NULL
+    DROP TABLE bronze.erp_cust_az12;
+GO
+
+CREATE TABLE bronze.erp_cust_az12 (
+    cid   NVARCHAR(50),
+    bdate DATE,
+    gen   NVARCHAR(10)
+);
+GO
+
+-- 5. ERP Location Mapping Table
+IF OBJECT_ID('bronze.erp_loc_a101', 'U') IS NOT NULL
+    DROP TABLE bronze.erp_loc_a101;
+GO
+
+CREATE TABLE bronze.erp_loc_a101 (
+    cid   NVARCHAR(50),
+    cntry NVARCHAR(50)
+);
+GO
+
+-- 6. ERP Product Category Matrix Table
+IF OBJECT_ID('bronze.erp_px_cat_g1v2', 'U') IS NOT NULL
+    DROP TABLE bronze.erp_px_cat_g1v2;
+GO
+
+CREATE TABLE bronze.erp_px_cat_g1v2 (
+    id          NVARCHAR(50),
+    cat         NVARCHAR(50),
+    subcat      NVARCHAR(50),
+    maintenance NVARCHAR(50)
+);
+GO
+
+
+-- ─── SECTION 3: VERIFICATION AUDIT ──────────────────────────────────
 
 SELECT 
     s.name AS schema_name, 
