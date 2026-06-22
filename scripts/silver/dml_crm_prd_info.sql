@@ -1,9 +1,9 @@
 /*
 ===============================================================================
-Script Name:         Cleanse and Load silver.crm_prd_info
+Script Name:         Cleanse, Load, and Audit silver.crm_prd_info
 Purpose:             Cleanses, standardizes, and derives business categories 
-                     for product data from the Bronze landing layer before 
-                     loading it into the Silver layer.
+                     for product data from the Bronze landing layer, then 
+                     immediately runs a comprehensive 5-part data quality audit.
 Author:              Timothy
 Create Date:         2026-06-23
 
@@ -18,9 +18,17 @@ Warning:
 USE DataWarehouse;
 GO
 
+PRINT '======================================================================';
+PRINT '          PROCESSING SILVER LAYER: LOADING & AUDITING PRODUCT DATA    ';
+PRINT '======================================================================';
+PRINT '';
+
 -- ==============================================================================
 -- STEP 1: DATA CLEANING & STANDARDIZATION
 -- ==============================================================================
+PRINT '----------------------------------------------------------------------';
+PRINT ' STEP 1: DATA CLEANING & LOAD';
+PRINT '----------------------------------------------------------------------';
 
 -- Best Practice: Clear the Silver table before a full batch load to prevent data duplication
 TRUNCATE TABLE silver.crm_prd_info;
@@ -76,16 +84,76 @@ PRINT '----------------------------------------------------------------------';
 
 
 -- ==============================================================================
--- STEP 2: DATA VALIDATION AUDIT
+-- STEP 2: COMPREHENSIVE DATA QUALITY AUDIT SUITE
 -- ==============================================================================
-PRINT '>> Running Quality Audit: Checking for Duplicates or NULL IDs...';
+PRINT '';
+PRINT '----------------------------------------------------------------------';
+PRINT ' STEP 2: DATA QUALITY SUITE';
+PRINT '----------------------------------------------------------------------';
 
--- Best Practice: This query should return ZERO rows. 
--- If any rows appear, your primary identifier integrity check has failed.
+-- CHECK 2.1: UNIQUE IDENTIFIER & NULL AUDIT
+PRINT '>> [CHECK 1/5] Checking for Duplicate or NULL Product IDs...';
 SELECT 
-    prd_id,
+    prd_id, 
     COUNT(*) AS duplicate_count
 FROM silver.crm_prd_info
 GROUP BY prd_id
 HAVING COUNT(*) > 1 OR prd_id IS NULL;
+PRINT '----------------------------------------------------------------------';
+
+-- CHECK 2.2: STRING PADDING & EMPTY VALUE AUDIT (TRIM CHECK)
+PRINT '>> [CHECK 2/5] Checking for Hidden Spaces or Empty Product Names...';
+SELECT 
+    prd_id, 
+    prd_nm,
+    LEN(prd_nm) AS current_length
+FROM silver.crm_prd_info
+WHERE 
+    prd_nm LIKE ' %'          -- Captures leading spaces
+    OR prd_nm LIKE '% '       -- Captures trailing spaces
+    OR prd_nm = ''            -- Captures empty strings
+    OR prd_nm IS NULL;        -- Captures missing names
+PRINT '----------------------------------------------------------------------';
+
+-- CHECK 2.3: DATE LINEAGE & TIMELINE INTEGRITY AUDIT
+PRINT '>> [CHECK 3/5] Checking Timeline Validity (Start Date vs End Date)...';
+SELECT 
+    prd_id, 
+    prd_key, 
+    prd_start_dt, 
+    prd_end_dt
+FROM silver.crm_prd_info
+WHERE prd_start_dt > prd_end_dt;
+PRINT '----------------------------------------------------------------------';
+
+-- CHECK 2.4: DATA FORMATTING & EXTRACTED KEY AUDIT
+PRINT '>> [CHECK 4/5] Checking Formatted Category IDs (cat_id)...';
+SELECT 
+    prd_id, 
+    cat_id, 
+    LEN(cat_id) AS cat_id_length
+FROM silver.crm_prd_info
+WHERE 
+    cat_id IS NULL 
+    OR LEN(cat_id) != 5 
+    OR cat_id LIKE '%-%';     -- Flags if a hyphen slipped past the REPLACE function
+PRINT '----------------------------------------------------------------------';
+
+-- CHECK 2.5: BUSINESS LOGIC SANITY AUDIT (COSTS & CODES)
+PRINT '>> [CHECK 5/5] Checking for Negative Costs or Invalid Product Lines...';
+SELECT 
+    prd_id, 
+    prd_cost, 
+    prd_line
+FROM silver.crm_prd_info
+WHERE 
+    prd_cost < 0 
+    OR prd_line = 'N/A';
+PRINT '----------------------------------------------------------------------';
+
+
+PRINT '';
+PRINT '======================================================================';
+PRINT '               SILVER LAYER LOAD & AUDIT PIPELINE COMPLETED           ';
+PRINT '======================================================================';
 GO
