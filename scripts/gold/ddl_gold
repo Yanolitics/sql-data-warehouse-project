@@ -1,0 +1,130 @@
+-- ====================================================================
+-- Project:     Data Warehouse - Gold Layer (Dimensional Modeling)
+-- Developer:   Yanolitics
+-- Purpose:     Conformed Star Schema Deployment Script (Dimensions & Facts)
+-- Strategy:    Clean Slate Drop followed by full DDL initialization
+-- ====================================================================
+
+USE DataWarehouse;
+GO
+
+PRINT '======================================================================';
+PRINT '         CLEANING EXISTING GOLD LAYER VIEWS (CRITICAL ORDER)          ';
+PRINT '======================================================================';
+
+-- STEP 1: Drop Fact tables first to break relational dependencies
+PRINT '>> Dropping View if exists: gold.fact_sales';
+DROP VIEW IF EXISTS gold.fact_sales;
+
+-- STEP 2: Safe to drop Parent Dimension tables now
+PRINT '>> Dropping View if exists: gold.dim_customer';
+DROP VIEW IF EXISTS gold.dim_customer;
+
+PRINT '>> Dropping View if exists: gold.dim_product';
+DROP VIEW IF EXISTS gold.dim_product;
+GO
+
+
+PRINT '======================================================================';
+PRINT '         INITIALIZING GOLD LAYER VIEWS DEPLOYMENT                     ';
+PRINT '======================================================================';
+
+-- ─── VIEW 1: CUSTOMER CONFORMED DIMENSION ───────────────────────────
+PRINT '>> Creating View: gold.dim_customer';
+GO
+
+CREATE OR ALTER VIEW gold.dim_customer AS
+SELECT
+    -- 1. SURROGATE KEY: Generates a unique sequence for the dimension
+    ROW_NUMBER() OVER (ORDER BY ci.cst_id) AS customer_key,
+    
+    -- 2. BUSINESS KEYS & NATURAL IDENTIFIERS
+    ci.cst_id        AS customer_id,
+    ci.cst_key       AS customer_number,
+    
+    -- 3. CORE ATTRIBUTES
+    ci.cst_firstname AS first_name,
+    ci.cst_lastname  AS last_name,
+    la.cntry         AS country,
+    ci.cst_marital_status AS marital_status,
+    
+    -- 4. CONSOLIDATED GENDER MODEL (Fallback logic: Use CRM first, fallback to ERP)
+    CASE
+        WHEN ci.cst_gndr != 'N/A' THEN ci.cst_gndr
+        ELSE COALESCE(ca.gen, 'N/A')
+    END AS gender,
+    
+    -- 5. HISTORICAL TIMESTAMPS
+    ca.bdate         AS birthdate,
+    ci.cst_create_date AS create_date
+FROM silver.crm_cust_info ci
+LEFT JOIN silver.erp_cust_az12 ca 
+    ON ci.cst_key = ca.cid
+LEFT JOIN silver.erp_loc_a101 la 
+    ON ci.cst_key = la.cid;
+GO
+
+-- ─── VIEW 2: PRODUCT CONFORMED DIMENSION ────────────────────────────
+PRINT '>> Creating View: gold.dim_product';
+GO
+
+CREATE OR ALTER VIEW gold.dim_product AS
+SELECT
+    -- 1. SURROGATE KEY: Generates a unique sequence for your dimensional model
+    ROW_NUMBER() OVER (ORDER BY pi.prd_start_dt, pi.prd_key) AS product_key,
+    
+    -- 2. BUSINESS KEYS & NATURAL IDENTIFIERS
+    pi.prd_id        AS product_id,
+    pi.prd_key       AS product_number,
+    pi.cat_id        AS category_id,
+    
+    -- 3. CORE DESCRIPTIVE ATTRIBUTES & HIERARCHIES
+    pi.prd_nm        AS product_name,
+    pcg.cat          AS category,
+    pcg.subcat       AS subcategory,
+    pi.prd_line      AS product_line,
+    pcg.maintenance  AS maintenance,
+    
+    -- 4. FINANCIAL METRICS
+    pi.prd_cost      AS cost,
+    
+    -- 5. TIMELINE ATTRIBUTES
+    pi.prd_start_dt  AS start_date
+FROM silver.crm_prd_info AS pi
+LEFT JOIN silver.erp_px_cat_g1v2 AS pcg
+    ON pi.cat_id = pcg.id
+WHERE pi.prd_end_dt IS NULL; -- Filters out historical changes to keep only the current active version
+GO
+
+-- ─── VIEW 3: CENTRAL TRANSACTIONAL SALES FACT ───────────────────────
+PRINT '>> Creating View: gold.fact_sales';
+GO
+
+CREATE OR ALTER VIEW gold.fact_sales AS
+SELECT
+    -- 1. BUSINESS KEYS & TRANSACTION IDENTIFIERS
+    sd.sls_ord_num   AS order_number,
+    
+    -- 2. DIMENSIONAL FOREIGN KEYS (Surrogate Keys linking to Dimensions)
+    dp.product_key,
+    dc.customer_key,
+    
+    -- 3. TRANSACTIONAL DATES
+    sd.sls_order_dt  AS order_date,
+    sd.sls_ship_dt   AS shipping_date,
+    sd.sls_due_dt    AS due_date,
+    
+    -- 4. MEASURES, METRICS & NUMERIC FACTS
+    sd.sls_sales     AS sales_amount,
+    sd.sls_quantity  AS quantity,
+    sd.sls_price     AS price
+FROM silver.crm_sales_details sd
+LEFT JOIN gold.dim_customer dc
+    ON sd.sls_cust_id = dc.customer_id
+LEFT JOIN gold.dim_product dp
+    ON sd.sls_prd_key = dp.product_number;
+GO
+
+PRINT '======================================================================';
+PRINT '         GOLD LAYER DIMENSIONAL VIEWS DEPLOYED SUCCESSFULLY           ';
+PRINT '======================================================================';
