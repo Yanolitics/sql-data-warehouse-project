@@ -1,0 +1,279 @@
+
+-- ====================================================================
+-- Project:     Data Warehouse - Gold Layer EDA Playbook
+-- Developer:   Yanolitics
+-- Purpose:     Unified Exploratory Data Analysis & Metric Validation Workbook
+-- Structure:   1. Schema Metadata Discovery
+--              2. Dimensional Domain Profiling
+--              3. Temporal Timeline Analysis
+--              4. High-Level KPI Matrix Execution
+--              5. Volumetric & Magnitude Benchmarks
+--              6. Advanced Performance & Ranking Logs
+-- ====================================================================
+
+USE DataWarehouse;
+GO
+
+-- ====================================================================
+-- PART 1: DATABASE METADATA & STRUCTURAL INSPECTION
+-- ====================================================================
+PRINT '>> Running Part 1: Schema Discovery';
+
+-- Explore all valid analytical objects deployed inside the current catalog
+SELECT 
+    table_schema AS schema_name,
+    table_name   AS object_name,
+    table_type   AS object_type
+FROM INFORMATION_SCHEMA.TABLES;
+
+-- Inspect structural data types and definitions for the customer dimension
+SELECT 
+    column_name AS column_name,
+    data_type   AS data_type,
+    character_maximum_length AS max_length,
+    is_nullable AS is_nullable
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE table_name = 'dim_customer' AND table_schema = 'gold';
+
+
+-- ====================================================================
+-- PART 2: DIMENSIONAL CATALOG DOMAIN PROFILING
+-- ====================================================================
+PRINT '>> Running Part 2: Product Catalog Domain Profiling';
+
+-- Isolate distinct granular product mappings across categories
+SELECT DISTINCT 
+    category, 
+    subcategory, 
+    product_name
+FROM gold.dim_product;
+
+
+-- ====================================================================
+-- PART 3: TEMPORAL CHRONOLOGY & TIMELINE ANALYSIS
+-- ====================================================================
+PRINT '>> Running Part 3: Date Chronology Analysis';
+
+-- Establish baseline transaction operational boundaries
+SELECT
+    MIN(order_date) AS first_transaction_date,
+    MAX(order_date) AS last_transaction_date,
+    DATEDIFF(YEAR, MIN(order_date), MAX(order_date)) AS tracking_span_years
+FROM gold.fact_sales;
+
+-- Profile customer generational age baselines grouped by conformed gender
+SELECT
+    gender,
+    AVG(DATEDIFF(YEAR, birthdate, GETDATE())) AS average_customer_age
+FROM gold.dim_customer
+GROUP BY 
+    gender;
+
+
+-- ====================================================================
+-- PART 4: HIGH-LEVEL KPI MATRIX EXECUTION
+-- ====================================================================
+PRINT '>> Running Part 4: High-Level Dashboard KPI Snapshot';
+
+-- 1. REVENUE METRIC
+SELECT
+    'Total Sales'     AS measure_name, 
+    SUM(sales_amount) AS measure_value    
+FROM gold.fact_sales
+
+UNION ALL
+
+-- 2. VOLUME METRIC
+SELECT
+    'Total Quantity', 
+    SUM(quantity)
+FROM gold.fact_sales
+
+UNION ALL
+
+-- 3. UNIT PRICE METRIC
+SELECT
+    'Average Price', 
+    AVG(price)
+FROM gold.fact_sales
+
+UNION ALL
+
+-- 4. ORDER COUNT PERFORMANCE
+SELECT 
+    'Total Orders', 
+    COUNT(DISTINCT order_number) 
+FROM gold.fact_sales
+
+UNION ALL
+
+-- 5. ASSORTMENT DEPTH METRIC
+SELECT
+    'Total Products', 
+    COUNT(DISTINCT product_key)
+FROM gold.fact_sales
+
+UNION ALL
+
+-- 6. UNIQUE REACH METRIC
+SELECT
+    'Total Customers Ordered', 
+    COUNT(DISTINCT customer_key)
+FROM gold.fact_sales;
+
+-- ====================================================================
+-- PART 5: VOLUMETRIC & MAGNITUDE BENCHMARKS
+-- ====================================================================
+PRINT '>> Running Part 5: Volumetric Context & Magnitude Profiling';
+
+-- EXERCISE 1: Find total customers by countries
+SELECT
+    country,
+    COUNT(customer_key) AS total_customers
+FROM gold.dim_customer
+GROUP BY country
+ORDER BY total_customers DESC;
+
+-- EXERCISE 2: Find total customers by gender
+SELECT
+    gender,
+    COUNT(customer_key) AS total_customers
+FROM gold.dim_customer
+GROUP BY gender
+ORDER BY total_customers DESC;
+
+-- EXERCISE 3: Find total products by category
+SELECT
+    category,
+    COUNT(product_key) AS total_products
+FROM gold.dim_product
+GROUP BY category
+ORDER BY total_products DESC;
+
+-- EXERCISE 4: What is the average cost in each category
+SELECT
+    category,
+    AVG(cost) AS average_cost
+FROM gold.dim_product
+GROUP BY category
+ORDER BY average_cost DESC;
+
+-- EXERCISE 5: What is the total revenue generated for each category
+SELECT
+    dp.category,
+    COALESCE(SUM(fs.sales_amount), 0) AS total_revenue
+FROM gold.dim_product dp
+LEFT JOIN gold.fact_sales fs
+    ON dp.product_key = fs.product_key
+GROUP BY dp.category
+ORDER BY total_revenue DESC;
+
+-- EXERCISE 6: Find total revenue generated by each customer (Pre-Aggregated Engine Optimization)
+SELECT
+    dc.customer_key,
+    dc.first_name,
+    dc.last_name,
+    COALESCE(agg.total_revenue, 0) AS total_revenue
+FROM gold.dim_customer dc
+LEFT JOIN (
+    SELECT 
+        customer_key, 
+        SUM(sales_amount) AS total_revenue
+    FROM gold.fact_sales
+    WHERE customer_key IS NOT NULL
+    GROUP BY customer_key
+) agg ON dc.customer_key = agg.customer_key
+ORDER BY total_revenue DESC;
+
+-- EXERCISE 7: Distribution of sold items across countries (Pre-Aggregated Engine Optimization)
+SELECT
+    dc.country,
+    COALESCE(SUM(agg.total_quantity), 0) AS total_quantity_sold
+FROM gold.dim_customer dc
+LEFT JOIN (
+    SELECT 
+        customer_key,
+        SUM(quantity) AS total_quantity
+    FROM gold.fact_sales
+    WHERE customer_key IS NOT NULL
+    GROUP BY customer_key
+) agg ON dc.customer_key = agg.customer_key
+GROUP BY dc.country
+ORDER BY total_quantity_sold DESC;
+
+
+-- ====================================================================
+-- PART 6: ADVANCED PERFORMANCE & RANKING LOGS
+-- ====================================================================
+PRINT '>> Running Part 6: Ranking and Tiering Performance Audits';
+
+-- 📊 Metric A: Which 5 products generate the highest revenue? (Window Function Architecture)
+SELECT 
+    product_name,
+    total_revenue,
+    product_rank
+FROM (
+    SELECT
+        p.product_name,
+        SUM(s.sales_amount) AS total_revenue,
+        DENSE_RANK() OVER(ORDER BY SUM(s.sales_amount) DESC) AS product_rank
+    FROM gold.fact_sales s
+    LEFT JOIN gold.dim_product p
+        ON s.product_key = p.product_key
+    GROUP BY p.product_name
+) ranking_context
+WHERE product_rank <= 5;
+
+-- 📊 Metric B: What are the 5 worst-performing products in terms of sales?
+SELECT TOP 5
+    p.product_key,
+    p.product_name,
+    COALESCE(SUM(s.sales_amount), 0) AS total_revenue
+FROM gold.dim_product p
+LEFT JOIN gold.fact_sales s
+    ON p.product_key = s.product_key
+GROUP BY
+    p.product_key,
+    p.product_name
+ORDER BY total_revenue ASC;
+
+-- 📊 Metric C: Find the top 10 customers who have generated the highest revenue
+SELECT 
+    customer_key,
+    customer,
+    total_spent,
+    spending_rank
+FROM (
+    SELECT 
+        c.customer_key,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer,
+        SUM(s.sales_amount) AS total_spent,
+        ROW_NUMBER() OVER(ORDER BY SUM(s.sales_amount) DESC) AS spending_rank
+    FROM gold.fact_sales s
+    LEFT JOIN gold.dim_customer c
+        ON s.customer_key = c.customer_key
+    GROUP BY  
+        c.customer_key,
+        CONCAT(c.first_name, ' ', c.last_name)
+) ranking_context
+WHERE spending_rank <= 10;
+
+-- 📊 Metric D: The 3 customers with the fewest orders placed
+SELECT TOP 3
+    c.customer_key,
+    c.first_name,
+    c.last_name,
+    COUNT(DISTINCT s.order_number) AS orders
+FROM gold.dim_customer c
+LEFT JOIN gold.fact_sales s
+    ON c.customer_key = s.customer_key
+GROUP BY    
+    c.customer_key,
+    c.first_name,
+    c.last_name
+ORDER BY orders ASC;
+GO
+
+PRINT '======================================================================';
+PRINT '         MASTER EDA UNIFIED WORKBOOK COMPLETED SUCCESSFULLY           ';
+PRINT '======================================================================';
