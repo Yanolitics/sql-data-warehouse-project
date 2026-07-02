@@ -163,7 +163,7 @@ FROM (
         product_name,
         cost,
         CASE 
-            WHEN cost <= 1000 THEN '1-1000'                      -- 🎯 Guardrail: Clear continuous bounds protect boundary edges
+            WHEN cost <= 1000 THEN '1-1000'                     
             WHEN cost > 1000 AND cost <= 2000 THEN '1001-2000'
             ELSE 'Above 2000'
         END AS segment
@@ -188,7 +188,7 @@ cte_customer_segmentation AS (
     SELECT 
         customer_key,
         CASE
-            WHEN duration >= 12 AND total_spent >= 5000 THEN 'VIP'     -- 🎯 Guardrail: Inclusive boundary checks exact totals
+            WHEN duration >= 12 AND total_spent >= 5000 THEN 'VIP'   
             WHEN duration >= 12 AND total_spent < 5000  THEN 'Regular'
             ELSE 'New'
         END AS segment
